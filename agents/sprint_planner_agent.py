@@ -21,12 +21,16 @@ class SprintPlannerAgent:
 
         if feedback:
             feedback_text = "\n".join(feedback)
+        qa_context = "No additional clarifications provided."
+        if clarification_answers:
+            qa_lines = [f"Q: {q}\nA: {ans}" for q, ans in clarification_answers.items()]
+            qa_context = "\n\n".join(qa_lines)
 
         system_instructions = """
         You are a Senior Agile Product Manager and Delivery Lead.
 
         Your responsibility is to convert validated product requirements,
-        strategy, and architecture into a realistic MVP delivery plan.
+        strategy, architecture and user clarifications(if given) into a realistic MVP delivery plan.
 
         RULES:
 
@@ -61,6 +65,9 @@ class SprintPlannerAgent:
         REQUIREMENTS
 
         {requirements.model_dump_json(indent=2)}
+
+        USER CLARIFICATIONS
+        {qa_context}
 
         PRODUCT STRATEGY
 
