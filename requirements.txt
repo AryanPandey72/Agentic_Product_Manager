@@ -1,10 +1,15 @@
 langgraph
+
 langchain
+
 langchain-google-genai
+
+langchain-openai
 
 google-generativeai
 
 fastapi
+
 uvicorn
 
 pydantic
