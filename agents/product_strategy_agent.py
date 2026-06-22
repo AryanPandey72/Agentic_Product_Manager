@@ -3,17 +3,22 @@ from schemas.strategy_schema import ProductStrategySchema
 
 class ProductStrategyAgent:
     def __init__(self):
-        # Using the reasoning tier for complex market and business logic analysis
         self.llm = get_llm(tier="reasoning")
 
-    def run(self, requirements: dict, feedback: list | None = None) -> ProductStrategySchema:
+    # FIXED: Added clarification_answers to the parameters
+    def run(self, requirements: dict, clarification_answers: dict | None = None, feedback: list | None = None) -> ProductStrategySchema:
         structured_llm = self.llm.with_structured_output(ProductStrategySchema)
         
-        # Normalize inputs (support Pydantic models)
         if hasattr(requirements, "model_dump"):
             finalized_requirements = requirements.model_dump()
         else:
             finalized_requirements = requirements
+
+        # FIXED: Build the Q&A transcript
+        qa_context = "No additional clarifications provided."
+        if clarification_answers:
+            qa_lines = [f"Q: {q}\nA: {ans}" for q, ans in clarification_answers.items()]
+            qa_context = "\n\n".join(qa_lines)
 
         feedback_context = ""
         if feedback:
@@ -33,10 +38,15 @@ class ProductStrategyAgent:
         - Avoid fluff, buzzwords, or generic business text.
         - Enforce absolute minimalism: adhere strictly to the Max item limits specified in the schema.
         - Ensure monetization and GTM strategies match the target users and constraints provided.
+        - Pay close attention to the explicitly stated USER CLARIFICATIONS if given.
         """
 
+        # FIXED: Inject the USER CLARIFICATIONS into the prompt
         prompt = f"""
         {system_instructions}
+        
+        USER CLARIFICATIONS:
+        {qa_context}
         
         Validated Product Requirements:
         {finalized_requirements}

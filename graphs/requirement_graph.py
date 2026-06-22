@@ -54,8 +54,10 @@ def strategy_node(state: GraphState):
     print("RUNNING: PRODUCT STRATEGY AGENT")
     print("=" * 60)
 
+    # FIXED: Passing clarification_answers to Strategy Agent
     result = strategy_agent.run(
         requirements=state["requirements"],
+        clarification_answers=state.get("clarification_answers", {}),
         feedback=state.get("validation_feedback", [])
     )
 
@@ -63,23 +65,23 @@ def strategy_node(state: GraphState):
         "strategy": result
     }
 
-
 def architect_node(state: GraphState):
     print("\n" + "=" * 60)
     print("RUNNING: TECHNICAL ARCHITECT AGENT")
     print(f"CURRENT LOOP: {state['loop_count']}")
     print("=" * 60)
 
+    # FIXED: Passing clarification_answers to Architect Agent
     result = architect_agent.run(
         requirements=state["requirements"],
         strategy=state["strategy"],
+        clarification_answers=state.get("clarification_answers", {}),
         feedback=state.get("validation_feedback", [])
     )
 
     return {
         "architecture": result
     }
-
 
 def validation_node(state: GraphState):
     print("\n" + "=" * 60)

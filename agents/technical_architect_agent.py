@@ -1,22 +1,21 @@
 from tools.llm_factory import get_llm
 from schemas.architecture_schema import ArchitectureSchema
 
-
 class TechnicalArchitectAgent:
 
     def __init__(self):
         self.llm = get_llm(tier="reasoning")
 
+    # FIXED: Added clarification_answers to the parameters
     def run(
         self,
         requirements: dict,
         strategy: dict,
+        clarification_answers: dict | None = None,
         feedback: list | None = None
     ) -> ArchitectureSchema:
 
-        structured_llm = self.llm.with_structured_output(
-            ArchitectureSchema
-        )
+        structured_llm = self.llm.with_structured_output(ArchitectureSchema)
 
         if hasattr(requirements, "model_dump"):
             finalized_requirements = requirements.model_dump()
@@ -28,17 +27,20 @@ class TechnicalArchitectAgent:
         else:
             product_strategy = strategy
 
-        feedback_context = ""
+        # FIXED: Build the Q&A transcript
+        qa_context = "No additional clarifications provided."
+        if clarification_answers:
+            qa_lines = [f"Q: {q}\nA: {ans}" for q, ans in clarification_answers.items()]
+            qa_context = "\n\n".join(qa_lines)
 
+        feedback_context = ""
         if feedback:
             feedback_context = f"""
-
             Validation Feedback:
 
             {feedback}
 
             Apply every correction requested by the validator.
-
             """
 
         system_instructions = """
@@ -117,20 +119,29 @@ class TechnicalArchitectAgent:
         a design review document for engineering leadership.
         """
 
+
+        # FIXED: Inject USER CLARIFICATIONS into the prompt
         prompt = f"""
         {system_instructions}
 
-        VALIDATED REQUIREMENTS
+        USER CLARIFICATIONS
+        {qa_context}
 
+        VALIDATED REQUIREMENTS
         {finalized_requirements}
 
         PRODUCT STRATEGY
-
         {product_strategy}
 
         {feedback_context}
         """
 
-        response = structured_llm.invoke(prompt)
+        return structured_llm.invoke(prompt)
+    
 
-        return response
+
+
+
+
+
+    
