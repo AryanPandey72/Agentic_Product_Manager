@@ -155,7 +155,8 @@ if st.button(
     run_autonomous_agent(
         {
             "user_idea": idea,
-            "clarification_answers": {}
+            "clarification_answers": {},
+            "loop_count": 0
         }
     )
 
