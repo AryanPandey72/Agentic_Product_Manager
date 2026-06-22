@@ -1,4 +1,5 @@
 import streamlit as st
+import uuid
 from graphs.requirement_graph import graph
 
 st.set_page_config(
@@ -8,18 +9,23 @@ st.set_page_config(
 
 st.title("Agentic Product Manager")
 
+# Initialize a unique thread ID in session state if it doesn't exist
 if "thread_id" not in st.session_state:
-    st.session_state["thread_id"] = "session_1"
+    st.session_state["thread_id"] = str(uuid.uuid4())
 
-config = {
-    "configurable": {
-        "thread_id": st.session_state["thread_id"]
+
+def get_config():
+    """Helper function to dynamically build the graph config with the latest thread_id."""
+    return {
+        "configurable": {
+            "thread_id": st.session_state["thread_id"]
+        }
     }
-}
 
 
 def run_autonomous_agent(payload_or_none):
-
+    current_config = get_config()
+    
     with st.status(
         "Starting Agent Workflow...",
         expanded=True
@@ -27,11 +33,10 @@ def run_autonomous_agent(payload_or_none):
 
         for event in graph.stream(
             payload_or_none,
-            config=config
+            config=current_config
         ):
 
             if "requirement_node" in event:
-
                 status.update(
                     label=(
                         "Requirement Agent: "
@@ -40,8 +45,16 @@ def run_autonomous_agent(payload_or_none):
                     state="running"
                 )
 
-            elif "strategy_node" in event:
+            elif "clarification_node" in event:
+                status.update(
+                    label=(
+                        "Requirement Agent: "
+                        "Additional clarification required..."
+                    ),
+                    state="running"
+                )
 
+            elif "strategy_node" in event:
                 status.update(
                     label=(
                         "Product Strategy Agent: "
@@ -51,7 +64,6 @@ def run_autonomous_agent(payload_or_none):
                 )
 
             elif "architect_node" in event:
-
                 status.update(
                     label=(
                         "Technical Architect Agent: "
@@ -61,7 +73,6 @@ def run_autonomous_agent(payload_or_none):
                 )
 
             elif "validation_node" in event:
-
                 validation_result = event["validation_node"]
 
                 loop_count = validation_result.get(
@@ -80,7 +91,6 @@ def run_autonomous_agent(payload_or_none):
                 )
 
                 if not is_approved:
-
                     route_name = {
                         "requirement": "Requirement Agent",
                         "strategy": "Product Strategy Agent",
@@ -100,7 +110,6 @@ def run_autonomous_agent(payload_or_none):
                     )
 
                 else:
-
                     status.update(
                         label=(
                             f"Validation Agent: "
@@ -111,7 +120,6 @@ def run_autonomous_agent(payload_or_none):
                     )
 
             elif "document_node" in event:
-
                 status.update(
                     label=(
                         "Document Generator: "
@@ -121,7 +129,6 @@ def run_autonomous_agent(payload_or_none):
                 )
 
             elif "sprint_planner_node" in event:
-
                 status.update(
                     label=(
                         "Sprint Planner: "
@@ -135,123 +142,73 @@ def run_autonomous_agent(payload_or_none):
             state="complete"
         )
 
-    st.session_state["current_state"] = graph.get_state(
-        config
-    )
-
+    # Capture the latest snapshot after streaming ends
+    st.session_state["current_state"] = graph.get_state(current_config)
     st.rerun()
 
 
-idea = st.text_area(
-    "Describe your product idea",
-    height=200
-)
+idea = st.text_area("Describe your product idea", height=200)
 
-if st.button(
-    "Analyze Idea",
-    use_container_width=True
-):
+if st.button("Analyze Idea", use_container_width=True):
+    st.session_state["thread_id"] = str(uuid.uuid4())
+    
+    if "current_state" in st.session_state:
+        del st.session_state["current_state"]
+        
+    run_autonomous_agent({
+        "user_idea": idea,
+        "clarification_answers": {},
+        "loop_count": 0
+    })
 
-    run_autonomous_agent(
-        {
-            "user_idea": idea,
-            "clarification_answers": {},
-            "loop_count": 0
-        }
-    )
-
-
+# --- DUMB UI LOGIC ---
 if "current_state" in st.session_state:
+    current_config = get_config()
+    state = graph.get_state(current_config)
 
-    state = graph.get_state(config)
+    # 1. CHECK IF GRAPH IS PAUSED (WAITING FOR HUMAN)
+    if state.next and "requirement_node" in state.next:
+        st.subheader("Requirement Agent Needs Clarification")
 
-    if state.next == ("clarification",):
-
-        st.subheader(
-            "Requirement Agent Needs Clarification"
-        )
-
-        questions = (
-            state.values["requirements"]
-            .clarification_questions
-        )
-
+        questions = state.values.get("clarification_questions", [])
         answers = {}
 
         for i, q in enumerate(questions):
+            answers[q] = st.text_input(q, key=f"q_{i}_{state.values.get('loop_count', 0)}")
 
-            answers[q] = st.text_input(
-                q,
-                key=f"q_{i}"
-            )
-
-        if st.button("Submit Answers"):
-
+        if st.button("Submit Answers", use_container_width=True):
+            # Inject the answers into the frozen state
             graph.update_state(
-                config,
-                {
-                    "clarification_answers": answers
-                }
+                current_config,
+                {"clarification_answers": answers}
             )
-
+            
+            # Resume the graph with a payload of None. 
+            # LangGraph knows exactly where it left off!
             run_autonomous_agent(None)
 
-    elif not state.next and "architecture" in state.values:
+    # 2. CHECK IF GRAPH REACHED THE END
+    elif not state.next and "document_path" in state.values:
+        st.success("Workflow Completed Successfully")
+        final_loops = state.values.get("loop_count", 1)
+        st.info(f"Validation completed after {final_loops} cycle(s).")
 
-        st.success(
-            "Workflow Completed Successfully"
-        )
+        st.subheader("Generated Deliverables")
 
-        final_loops = state.values.get(
-            "loop_count",
-            1
-        )
-
-        st.info(
-            f"Validation completed after "
-            f"{final_loops} cycle(s)."
-        )
-
-        st.subheader(
-            "Generated Deliverables"
-        )
-
-        if (
-            "document_path" in state.values
-            and state.values["document_path"]
-        ):
-
-            with open(
-                state.values["document_path"],
-                "rb"
-            ) as file:
-
+        if state.values.get("document_path"):
+            with open(state.values["document_path"], "rb") as file:
                 st.download_button(
                     label="📄 Download Product Blueprint",
                     data=file.read(),
                     file_name="Product_Blueprint.docx",
-                    mime=(
-                        "application/vnd.openxmlformats-officedocument."
-                        "wordprocessingml.document"
-                    )
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )
 
-        if (
-            "sprint_plan_path" in state.values
-            and state.values["sprint_plan_path"]
-        ):
-
-            with open(
-                state.values["sprint_plan_path"],
-                "rb"
-            ) as file:
-
+        if state.values.get("sprint_plan_path"):
+            with open(state.values["sprint_plan_path"], "rb") as file:
                 st.download_button(
                     label="📄 Download Sprint Plan",
                     data=file.read(),
                     file_name="Sprint_Plan.docx",
-                    mime=(
-                        "application/vnd.openxmlformats-officedocument."
-                        "wordprocessingml.document"
-                    )
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document"
                 )

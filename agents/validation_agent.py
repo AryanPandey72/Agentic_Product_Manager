@@ -13,20 +13,26 @@ class ValidationAgent:
     def __init__(self):
         self.llm = get_llm(tier="reasoning") 
 
-    # NEW: Added original_idea to the parameters
-    def run(self, original_idea: str, requirements: dict, strategy: dict, architecture: dict) -> ValidationResult:
+    # FIXED: Removed the redundant clarification_questions parameter
+    def run(self, original_idea: str, clarification_answers: dict, requirements: dict, strategy: dict, architecture: dict) -> ValidationResult:
         structured_llm = self.llm.with_structured_output(ValidationResult)
+
+        # FIXED: Bulletproof and clean dictionary iteration
+        qa_context = "No additional clarifications provided."
+        if clarification_answers:
+            qa_lines = [f"Q: {q}\nA: {ans}" for q, ans in clarification_answers.items()]
+            qa_context = "\n\n".join(qa_lines)
 
         system_instructions = """
         You are a Principal Staff Engineer and strict system reviewer.
-        Evaluate the entire product payload against the ORIGINAL USER IDEA.
+        Evaluate the entire product payload against the ORIGINAL USER IDEA and any USER CLARIFICATIONS.
         
         CRITIQUE & ROUTING CRITERIA:
         
         1. CONTEXT RETENTION CHECK (Target: "requirement" or "strategy")
-        - Look at the ORIGINAL IDEA. Did the user specify a company or industry (e.g., Toyota)? 
-        - If YES: The requirements/strategy MUST use specific terminology for that domain. If it reverted to generic B2B fluff, set target_node="requirement" and reject.
-        - If NO: The requirements/strategy should remain appropriately broad. If the agents hallucinated a specific industry that wasn't asked for, set target_node="requirement" and reject.
+        - Review the ORIGINAL IDEA and USER CLARIFICATIONS. 
+        - The requirements and strategy MUST incorporate all specific requests, features, or constraints provided by the user.
+        - If the agents hallucinated features not requested, or if they dropped specific features the user explicitly asked for, set target_node="requirement" and reject.
 
         2. ARCHITECTURE CHECK (Target: "architect")
         - Constraints: Does the tech stack violate any stated business constraints?
@@ -58,12 +64,16 @@ class ValidationAgent:
         If flawless, set is_approved=True and target_node="none".
         """
 
-        # NEW: Injecting the original_idea into the prompt
         prompt = f"""
         {system_instructions}
         
+        NOTE: The user provided additional clarifications below. Treat these as an extension of their ORIGINAL IDEA.
+
         === ORIGINAL IDEA ===
         {original_idea}
+
+        === USER CLARIFICATIONS ===
+        {qa_context}
         
         === REQUIREMENTS ===
         {requirements}
