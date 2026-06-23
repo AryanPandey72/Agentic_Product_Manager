@@ -21,10 +21,6 @@ class SprintPlannerAgent:
 
         if feedback:
             feedback_text = "\n".join(feedback)
-        qa_context = "No additional clarifications provided."
-        if clarification_answers:
-            qa_lines = [f"Q: {q}\nA: {ans}" for q, ans in clarification_answers.items()]
-            qa_context = "\n\n".join(qa_lines)
 
         system_instructions = """
         You are a Senior Agile Product Manager and Delivery Lead.
