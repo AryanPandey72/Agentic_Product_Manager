@@ -62,8 +62,6 @@ class SprintPlannerAgent:
 
         {requirements.model_dump_json(indent=2)}
 
-        USER CLARIFICATIONS
-        {qa_context}
 
         PRODUCT STRATEGY
 
